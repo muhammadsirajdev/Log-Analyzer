@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log Analyzer Dashboard</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg:         #0d1117;
+    --bg2:        #161b22;
+    --bg3:        #21262d;
+    --border:     #30363d;
+    --text:       #e6edf3;
+    --muted:      #8b949e;
+    --accent:     #58a6ff;
+    --green:      #3fb950;
+    --yellow:     #d29922;
+    --red:        #f85149;
+    --orange:     #f0883e;
+    --purple:     #bc8cff;
+    --font-mono:  'IBM Plex Mono', monospace;
+    --font-sans:  'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  #file-badge {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 2px 10px;
+    border-radius: 20px;
+    color: var(--muted);
+  }
+
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px;
+    display: grid;
+    gap: 24px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-family: var(--font-mono);
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .card .sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .card.red   .value { color: var(--red); }
+  .card.green .value { color: var(--green); }
+  .card.yellow .value { color: var(--yellow); }
+  .card.blue  .value { color: var(--accent); }
+  .card.purple .value { color: var(--purple); }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+  }
+  .panel h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 1100px) { .three-col { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px)  { .three-col { grid-template-columns: 1fr; } }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  th {
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg3); }
+
+  .bar-cell { position: relative; }
+  .bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--accent);
+    opacity: 0.15;
+    border-radius: 2px;
+    transition: width 0.5s;
+  }
+  .bar-text { position: relative; z-index: 1; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+  }
+  .badge-2xx { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-3xx { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-4xx { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-5xx { background: rgba(248,81,73,0.15);  color: var(--red); }
+
+  .malformed-line {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+  .malformed-line .line-num {
+    color: var(--muted);
+    margin-right: 12px;
+  }
+  .malformed-line .content {
+    color: var(--yellow);
+    word-break: break-all;
+  }
+
+  .perc-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+  }
+  @media (max-width: 700px) { .perc-grid { grid-template-columns: repeat(3, 1fr); } }
+  .perc-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+  .perc-item .perc-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .perc-item .perc-value {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: var(--accent);
+  }
+
+  #loading {
+    text-align: center;
+    padding: 80px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  canvas { max-height: 280px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>▶ LOG ANALYZER</h1>
+  <span id="file-badge">loading...</span>
+</header>
+
+<div id="loading">
+  <div class="spinner"></div>
+  Fetching analysis results...
+</div>
+
+<main id="dashboard" style="display:none">
+
+  <div class="cards" id="summary-cards"></div>
+
+  <div class="panel">
+    <h2>Requests Over Time (by hour)</h2>
+    <canvas id="timeline-chart"></canvas>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>Status Code Distribution</h2>
+      <canvas id="status-chart"></canvas>
+    </div>
+    <div class="panel">
+      <h2>HTTP Methods</h2>
+      <canvas id="method-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Response Time Percentiles</h2>
+    <div class="perc-grid" id="perc-grid"></div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>🐌 Top 10 Slowest Endpoints (avg ms)</h2>
+      <table id="slowest-table">
+        <thead><tr><th>#</th><th>Path</th><th>Avg ms</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>🔥 Top 10 Most Requested Endpoints</h2>
+      <table id="top-table">
+        <thead><tr><th>#</th><th>Path</th><th>Requests</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>Top IPs by Request Count</h2>
+      <table id="ip-table">
+        <thead><tr><th>#</th><th>IP Address</th><th>Requests</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>⚠️ Most Error-Prone Endpoints</h2>
+      <table id="error-ep-table">
+        <thead><tr><th>#</th><th>Path</th><th>Errors</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" id="malformed-panel">
+    <h2>⛔ Malformed / Skipped Lines</h2>
+    <div id="malformed-list"></div>
+  </div>
+
+</main>
+
+<script>
+async function loadData() {
+  try {
+    const res = await fetch("/api/results");
+    if (!res.ok) throw new Error("API error: " + res.status);
+    const d = await res.json();
+    renderDashboard(d);
+  } catch (err) {
+    document.getElementById("loading").innerHTML =
+      `<p style="color:var(--red)">Failed to load data: ${err.message}</p>`;
+  }
+}
+
+function renderDashboard(d) {
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("dashboard").style.display = "grid";
+  document.getElementById("file-badge").textContent = d.log_file || "unknown file";
+
+  renderCards(d);
+  renderTimeline(d.timeline);
+  renderStatusChart(d.status_groups);
+  renderMethodChart(d.method_counts);
+  renderPercentiles(d.response_time_stats);
+  renderTable("slowest-table", d.slowest_endpoints, ["path","avg_ms"], d.slowest_endpoints[0]?.avg_ms);
+  renderTable("top-table",     d.top_endpoints,     ["path","count"],  d.top_endpoints[0]?.count);
+  renderTable("ip-table",      d.top_ips,           ["ip","count"],    d.top_ips[0]?.count);
+  renderTable("error-ep-table",d.top_error_endpoints,["path","count"], d.top_error_endpoints[0]?.count);
+  renderMalformed(d.skipped_count, d.skipped_examples);
+}
+
+function renderCards(d) {
+  const rt = d.response_time_stats || {};
+  const cards = [
+    { label: "Total Requests",   value: d.total_entries.toLocaleString(),       cls: "blue" },
+    { label: "Error Rate",       value: d.error_rate + "%",                     cls: d.error_rate > 10 ? "red" : "green",
+      sub: `${d.error_count} errors` },
+    { label: "Avg Response",     value: rt.avg ? rt.avg + "ms" : "—",           cls: "purple" },
+    { label: "P99 Response",     value: rt.p99 ? rt.p99 + "ms" : "—",          cls: rt.p99 > 1000 ? "red" : "yellow" },
+    { label: "Skipped Lines",    value: d.skipped_count.toLocaleString(),       cls: d.skipped_count > 0 ? "yellow" : "green" },
+    { label: "JSON-format Lines",value: (d.format_counts?.json || 0).toLocaleString(), cls: "blue" },
+  ];
+
+  const container = document.getElementById("summary-cards");
+  container.innerHTML = cards.map(c => `
+    <div class="card ${c.cls}">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      ${c.sub ? `<div class="sub">${c.sub}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderTimeline(timeline) {
+  if (!timeline || !timeline.length) return;
+  const ctx = document.getElementById("timeline-chart").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: timeline.map(t => t.time),
+      datasets: [{
+        label: "Requests",
+        data: timeline.map(t => t.count),
+        borderColor: "#58a6ff",
+        backgroundColor: "rgba(88,166,255,0.08)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#8b949e", maxTicksLimit: 12 }, grid: { color: "#21262d" } },
+        y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+      }
+    }
+  });
+}
+
+function renderStatusChart(groups) {
+  if (!groups) return;
+  const ctx = document.getElementById("status-chart").getContext("2d");
+  const labels = Object.keys(groups).filter(k => groups[k] > 0);
+  const colors = { "2xx":"#3fb950","3xx":"#58a6ff","4xx":"#d29922","5xx":"#f85149","other":"#8b949e" };
+  new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{
+        data: labels.map(k => groups[k]),
+        backgroundColor: labels.map(k => colors[k] || "#8b949e"),
+        borderWidth: 2,
+        borderColor: "#161b22",
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: "#e6edf3", padding: 16 } }
+      }
+    }
+  });
+}
+
+function renderMethodChart(methods) {
+  if (!methods) return;
+  const ctx = document.getElementById("method-chart").getContext("2d");
+  const colors = { GET:"#58a6ff", POST:"#3fb950", PUT:"#d29922", DELETE:"#f85149", PATCH:"#bc8cff" };
+  const keys = Object.keys(methods);
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: keys,
+      datasets: [{
+        data: keys.map(k => methods[k]),
+        backgroundColor: keys.map(k => colors[k] || "#8b949e"),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#8b949e" }, grid: { display: false } },
+        y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+      }
+    }
+  });
+}
+
+function renderPercentiles(rt) {
+  if (!rt) return;
+  const items = [
+    { label: "Min",  value: rt.min },
+    { label: "Avg",  value: rt.avg },
+    { label: "P50",  value: rt.p50 },
+    { label: "P90",  value: rt.p90 },
+    { label: "P99",  value: rt.p99 },
+    { label: "Max",  value: rt.max },
+  ];
+  document.getElementById("perc-grid").innerHTML = items.map(i => `
+    <div class="perc-item">
+      <div class="perc-label">${i.label}</div>
+      <div class="perc-value">${i.value != null ? i.value + "ms" : "—"}</div>
+    </div>
+  `).join("");
+}
+
+function renderTable(tableId, rows, [col1, col2], maxVal) {
+  if (!rows || !rows.length) return;
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = rows.map((r, i) => {
+    const barPct = maxVal ? (r[col2] / maxVal * 100).toFixed(1) : 0;
+    return `
+      <tr>
+        <td style="color:var(--muted);width:32px">${i + 1}</td>
+        <td style="color:var(--accent)">${r[col1]}</td>
+        <td class="bar-cell">
+          <div class="bar-fill" style="width:${barPct}%"></div>
+          <span class="bar-text">${r[col2].toLocaleString()}</span>
+        </td>
+      </tr>`;
+  }).join("");
+}
+
+function renderMalformed(count, examples) {
+  const list = document.getElementById("malformed-list");
+  if (!count) {
+    list.innerHTML = `<p style="color:var(--green);font-family:var(--font-mono);font-size:0.85rem">✓ No malformed lines found.</p>`;
+    return;
+  }
+
+  const header = `<p style="margin-bottom:12px;color:var(--muted);font-size:0.85rem">
+    ${count.toLocaleString()} lines skipped total. Showing up to 10 examples:
+  </p>`;
+
+  const items = (examples || []).map(e => `
+    <div class="malformed-line">
+      <span class="line-num">line ${e.line_num}</span>
+      <span class="content">${escapeHtml(e.content || "(empty)")}</span>
+    </div>
+  `).join("");
+
+  list.innerHTML = header + items;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+loadData();
+</script>
+</body>
+</html>
